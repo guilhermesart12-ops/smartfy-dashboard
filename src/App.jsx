@@ -1307,8 +1307,22 @@ const SB_TYPE_TAG = {
 };
 
 function SbCard({item, onPostNow, onDelete}){
+  const [posting, setPosting] = useState(false);
+  const [posted, setPosted] = useState(false);
+  const [confirm, setConfirm] = useState(false);
   const sc = SB_STATUS_COLOR[item.status] || C.muted;
-  const typeTag = SB_TYPE_TAG[item.media_type] || {label:item.media_type||"Post", bg:C.border+"33", color:C.muted};
+  // Normalize media_type for display (backend may return uppercase)
+  const mtKey = (item.media_type||"").toLowerCase().replace("carousel_album","carousel");
+  const typeTag = SB_TYPE_TAG[mtKey] || {label:item.media_type||"Post", bg:C.border+"33", color:C.muted};
+
+  async function handlePostNow(){
+    if(!confirm){ setConfirm(true); setTimeout(()=>setConfirm(false),3000); return; }
+    setConfirm(false); setPosting(true);
+    await onPostNow(item.id);
+    setPosting(false); setPosted(true);
+    setTimeout(()=>setPosted(false),3000);
+  }
+
   return (
     <div style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 12px",marginBottom:8,cursor:"default"}}>
       {/* Thumbnail */}
@@ -1319,7 +1333,7 @@ function SbCard({item, onPostNow, onDelete}){
       {/* Type tag + name */}
       <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}>
         <span style={{background:typeTag.bg,color:typeTag.color,borderRadius:5,padding:"2px 7px",fontSize:10,fontWeight:700,flexShrink:0}}>
-          {SB_TYPE_ICONS[item.media_type]||"📌"} {typeTag.label}
+          {SB_TYPE_ICONS[mtKey]||"📌"} {typeTag.label}
         </span>
         <span style={{color:C.text,fontWeight:600,fontSize:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
           {item.name || ""}
@@ -1333,22 +1347,35 @@ function SbCard({item, onPostNow, onDelete}){
           💬 {item.caption}
         </div>
       )}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:6}}>
+      {/* Postar Agora — full width quando pending */}
+      {(item.status==="pending"||item.status==="failed")&&(
+        <button
+          onClick={handlePostNow}
+          disabled={posting}
+          style={{
+            width:"100%",
+            background: posted ? `${C.green}22` : confirm ? "#ff990022" : `${C.green}18`,
+            color: posted ? C.green : confirm ? "#ff9900" : C.green,
+            border:`1px solid ${posted?C.green:confirm?"#ff9900":C.green}44`,
+            borderRadius:7,padding:"6px 0",fontSize:12,fontWeight:700,
+            cursor:posting?"not-allowed":"pointer",
+            marginBottom:7,transition:"all .15s",
+            display:"flex",alignItems:"center",justifyContent:"center",gap:5,
+          }}>
+          {posting ? <><Loader size={11} style={{animation:"spin 1s linear infinite"}}/> Postando…</>
+           : posted ? <>✅ Postado!</>
+           : confirm ? <>⚠️ Confirmar post agora?</>
+           : <>▶ Postar Agora</>}
+        </button>
+      )}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
         <span style={{background:`${sc}22`,color:sc,borderRadius:5,padding:"2px 7px",fontSize:10,fontWeight:700}}>
           {item.status||"pending"}
         </span>
-        <div style={{display:"flex",gap:5}}>
-          {item.status==="pending"&&(
-            <button onClick={()=>onPostNow(item.id)}
-              style={{background:`${C.green}22`,color:C.green,border:"none",borderRadius:6,padding:"4px 8px",fontSize:11,cursor:"pointer",fontWeight:700}}>
-              ▶
-            </button>
-          )}
-          <button onClick={()=>onDelete(item.id)}
-            style={{background:`${C.red}15`,color:C.red,border:"none",borderRadius:6,padding:"4px 7px",cursor:"pointer"}}>
-            <Trash2 size={11}/>
-          </button>
-        </div>
+        <button onClick={()=>onDelete(item.id)}
+          style={{background:`${C.red}15`,color:C.red,border:"none",borderRadius:6,padding:"4px 7px",cursor:"pointer"}}>
+          <Trash2 size={11}/>
+        </button>
       </div>
     </div>
   );
@@ -1554,8 +1581,15 @@ function StoriesBot() {
         url = `${SB_URL}/stories`;
         body = { media_url:formMediaUrl.trim(), day_of_week:parseInt(formDay), scheduled_time:formTime, name:formName||undefined, media_type:"story" };
       } else {
+        // Mapear tipos internos → valores que o backend/Instagram aceita
+        const MEDIA_TYPE_MAP = {
+          image: "IMAGE",
+          video: "VIDEO",
+          reel:  "REEL",
+          carousel: "CAROUSEL_ALBUM",
+        };
         url = `${SB_URL}/feed`;
-        body = { media_type:formType, caption:formCaption||undefined, name:formName||undefined, scheduled_time:formTime, day_of_week:parseInt(formDay) };
+        body = { media_type: MEDIA_TYPE_MAP[formType]||formType.toUpperCase(), caption:formCaption||undefined, name:formName||undefined, scheduled_time:formTime, day_of_week:parseInt(formDay) };
         if(isCarousel){
           body.media_urls = formMediaUrls.map(s=>s.trim()).filter(Boolean);
         } else {
