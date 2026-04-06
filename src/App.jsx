@@ -1287,6 +1287,117 @@ function Integracoes({onMetaData,onKommoData}){
 
 // ─── STORIESBOT ───────────────────────────────────────────────────────────────
 const SB_URL = "https://storiebot.onrender.com";
+const SB_DAYS = [
+  {id:0,label:"DOM"},{id:1,label:"SEG"},{id:2,label:"TER"},
+  {id:3,label:"QUA"},{id:4,label:"QUI"},{id:5,label:"SEX"},{id:6,label:"SÁB"}
+];
+const SB_TABS = [
+  {id:"stories", label:"📸 Stories", color:"#e1306c"},
+  {id:"feed",    label:"🖼 Feed & Reels", color:"#405de6"},
+];
+const SB_STATUS_COLOR = {pending:C.yellow, posted:C.green, failed:C.red, processing:C.cyan, scheduled:C.accent};
+const SB_TYPE_ICONS = {story:"📸",image:"🖼",video:"🎬",reel:"🎭",carousel:"🎠"};
+
+const SB_TYPE_TAG = {
+  story:    {label:"Story",     bg:"#e1306c22", color:"#e1306c"},
+  image:    {label:"Feed",      bg:"#405de622", color:"#405de6"},
+  video:    {label:"Vídeo",     bg:"#06b6d422", color:"#06b6d4"},
+  reel:     {label:"Reel",      bg:"#833ab422", color:"#c084fc"},
+  carousel: {label:"Carrossel", bg:"#f59e0b22", color:"#f59e0b"},
+};
+
+function SbCard({item, onPostNow, onDelete}){
+  const sc = SB_STATUS_COLOR[item.status] || C.muted;
+  const typeTag = SB_TYPE_TAG[item.media_type] || {label:item.media_type||"Post", bg:C.border+"33", color:C.muted};
+  return (
+    <div style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 12px",marginBottom:8,cursor:"default"}}>
+      {/* Thumbnail */}
+      {item.media_url && (
+        <img src={item.media_url} alt="" onError={e=>{e.target.style.display="none";}}
+          style={{width:"100%",height:78,objectFit:"cover",borderRadius:7,marginBottom:8,border:`1px solid ${C.border}`}}/>
+      )}
+      {/* Type tag + name */}
+      <div style={{display:"flex",alignItems:"center",gap:5,marginBottom:4}}>
+        <span style={{background:typeTag.bg,color:typeTag.color,borderRadius:5,padding:"2px 7px",fontSize:10,fontWeight:700,flexShrink:0}}>
+          {SB_TYPE_ICONS[item.media_type]||"📌"} {typeTag.label}
+        </span>
+        <span style={{color:C.text,fontWeight:600,fontSize:12,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>
+          {item.name || ""}
+        </span>
+      </div>
+      {item.scheduled_time && (
+        <div style={{color:C.muted,fontSize:11,marginBottom:4}}>🕐 {item.scheduled_time}</div>
+      )}
+      {item.caption && (
+        <div style={{color:C.muted,fontSize:11,marginBottom:5,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>
+          💬 {item.caption}
+        </div>
+      )}
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginTop:6}}>
+        <span style={{background:`${sc}22`,color:sc,borderRadius:5,padding:"2px 7px",fontSize:10,fontWeight:700}}>
+          {item.status||"pending"}
+        </span>
+        <div style={{display:"flex",gap:5}}>
+          {item.status==="pending"&&(
+            <button onClick={()=>onPostNow(item.id)}
+              style={{background:`${C.green}22`,color:C.green,border:"none",borderRadius:6,padding:"4px 8px",fontSize:11,cursor:"pointer",fontWeight:700}}>
+              ▶
+            </button>
+          )}
+          <button onClick={()=>onDelete(item.id)}
+            style={{background:`${C.red}15`,color:C.red,border:"none",borderRadius:6,padding:"4px 7px",cursor:"pointer"}}>
+            <Trash2 size={11}/>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function SbKanban({items, onPostNow, onDelete, onAddInDay}){
+  const today = new Date().getDay();
+  return (
+    <div style={{display:"grid",gridTemplateColumns:"repeat(7,minmax(120px,1fr))",gap:8,overflowX:"auto",paddingBottom:8}}>
+      {SB_DAYS.map(({id,label})=>{
+        const dayItems = items.filter(it=>it.day_of_week===id);
+        const isToday = id===today;
+        return (
+          <div key={id} style={{
+            background: isToday ? `${C.accent}11` : C.card,
+            border:`1px solid ${isToday?C.accent:C.border}`,
+            borderRadius:10,padding:"10px 8px",minHeight:180,
+          }}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+              <span style={{color:isToday?C.accent:C.muted,fontWeight:700,fontSize:12,letterSpacing:"0.05em"}}>
+                {label}{isToday&&" ●"}
+              </span>
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <span style={{background:C.border,color:C.muted,borderRadius:99,width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700}}>
+                  {dayItems.length}
+                </span>
+                <button onClick={()=>onAddInDay(id)}
+                  style={{background:"transparent",border:"none",color:C.muted,cursor:"pointer",padding:0,display:"flex",alignItems:"center"}}
+                  title="Adicionar">
+                  <PlusCircle size={14}/>
+                </button>
+              </div>
+            </div>
+            {dayItems.length===0 ? (
+              <div style={{textAlign:"center",color:C.border,padding:"20px 0",fontSize:11}}>
+                <MessageSquare size={20} style={{opacity:0.3,display:"block",margin:"0 auto 6px"}}/>
+                Vazio
+              </div>
+            ) : (
+              dayItems.map(item=>(
+                <SbCard key={item.id} item={item} onPostNow={onPostNow} onDelete={onDelete}/>
+              ))
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
 
 function StoriesBot() {
   const [sbToken, setSbToken] = useState(null);
@@ -1295,31 +1406,28 @@ function StoriesBot() {
   const [sbLoginErr, setSbLoginErr] = useState("");
   const [sbLoading, setSbLoading] = useState(false);
 
-  // Tab: stories | feed
+  // 2 tabs
   const [sbTab, setSbTab] = useState("stories");
 
-  // Stories state
+  // Data
   const [stories, setStories] = useState([]);
-  const [storiesLoading, setStoriesLoading] = useState(false);
+  const [feedItems, setFeedItems] = useState([]); // feed + reels + carousel combined
+  const [dataLoading, setDataLoading] = useState(false);
 
-  // Feed state
-  const [feed, setFeed] = useState([]);
-  const [feedLoading, setFeedLoading] = useState(false);
-
-  // New post form
+  // Form
   const [showForm, setShowForm] = useState(false);
-  const [formType, setFormType] = useState("story"); // story | image | video | reel | carousel
+  const [formPresetDay, setFormPresetDay] = useState(null);
+  const [formType, setFormType] = useState("story");
   const [formMediaUrl, setFormMediaUrl] = useState("");
-  const [formMediaUrls, setFormMediaUrls] = useState(""); // for carousel, comma separated
+  const [formMediaUrls, setFormMediaUrls] = useState("");
   const [formCaption, setFormCaption] = useState("");
   const [formName, setFormName] = useState("");
   const [formDay, setFormDay] = useState("1");
   const [formTime, setFormTime] = useState("09:00");
   const [formLoading, setFormLoading] = useState(false);
   const [formErr, setFormErr] = useState("");
-  const [formSuccess, setFormSuccess] = useState("");
 
-  // Scheduler state
+  // Scheduler
   const [schedulerOn, setSchedulerOn] = useState(true);
 
   const sbHeaders = (tok) => ({
@@ -1338,36 +1446,26 @@ function StoriesBot() {
       const d = await r.json();
       if (!r.ok) { setSbLoginErr(d.detail || "Erro no login"); setSbLoading(false); return; }
       setSbToken(d.access_token);
-      loadStories(d.access_token);
-      loadFeed(d.access_token);
-      loadScheduler(d.access_token);
+      loadAll(d.access_token);
     } catch(e) { setSbLoginErr("Erro de conexão"); }
     setSbLoading(false);
   }
 
-  async function loadStories(tok) {
-    setStoriesLoading(true);
+  async function loadAll(tok) {
+    setDataLoading(true);
     try {
-      const r = await fetch(`${SB_URL}/stories`, { headers: sbHeaders(tok) });
-      const d = await r.json();
-      setStories(Array.isArray(d) ? d : []);
+      const [rs, rf] = await Promise.all([
+        fetch(`${SB_URL}/stories`, { headers: sbHeaders(tok||sbToken) }),
+        fetch(`${SB_URL}/feed`,    { headers: sbHeaders(tok||sbToken) }),
+      ]);
+      const [ds, df] = await Promise.all([rs.json(), rf.json()]);
+      setStories(Array.isArray(ds) ? ds : []);
+      setFeedItems(Array.isArray(df) ? df : []); // all feed types: image/video/reel/carousel
     } catch(e) {}
-    setStoriesLoading(false);
-  }
-
-  async function loadFeed(tok) {
-    setFeedLoading(true);
+    setDataLoading(false);
+    // also load scheduler
     try {
-      const r = await fetch(`${SB_URL}/feed`, { headers: sbHeaders(tok) });
-      const d = await r.json();
-      setFeed(Array.isArray(d) ? d : []);
-    } catch(e) {}
-    setFeedLoading(false);
-  }
-
-  async function loadScheduler(tok) {
-    try {
-      const r = await fetch(`${SB_URL}/scheduler/status`, { headers: sbHeaders(tok) });
+      const r = await fetch(`${SB_URL}/scheduler/status`, { headers: sbHeaders(tok||sbToken) });
       const d = await r.json();
       setSchedulerOn(d.enabled ?? true);
     } catch(e) {}
@@ -1375,299 +1473,258 @@ function StoriesBot() {
 
   async function toggleScheduler() {
     try {
-      const r = await fetch(`${SB_URL}/scheduler/toggle`, { method: "POST", headers: sbHeaders() });
+      const r = await fetch(`${SB_URL}/scheduler/toggle`, { method:"POST", headers:sbHeaders() });
       const d = await r.json();
       setSchedulerOn(d.enabled ?? !schedulerOn);
     } catch(e) {}
   }
 
-  async function postNowStory(id) {
-    await fetch(`${SB_URL}/stories/post-now`, {
-      method: "POST", headers: sbHeaders(),
-      body: JSON.stringify({ story_id: id }),
-    });
-    loadStories();
+  async function handlePostNow(id) {
+    if(sbTab==="stories"){
+      await fetch(`${SB_URL}/stories/post-now`, { method:"POST", headers:sbHeaders(), body:JSON.stringify({story_id:id}) });
+    } else {
+      await fetch(`${SB_URL}/feed/${id}/post-now`, { method:"POST", headers:sbHeaders() });
+    }
+    loadAll();
   }
 
-  async function postNowFeed(id) {
-    await fetch(`${SB_URL}/feed/${id}/post-now`, {
-      method: "POST", headers: sbHeaders(),
-    });
-    loadFeed();
+  async function handleDelete(id) {
+    if(sbTab==="stories"){
+      await fetch(`${SB_URL}/stories/${id}`, { method:"DELETE", headers:sbHeaders() });
+    } else {
+      await fetch(`${SB_URL}/feed/${id}`, { method:"DELETE", headers:sbHeaders() });
+    }
+    loadAll();
   }
 
-  async function deleteStory(id) {
-    await fetch(`${SB_URL}/stories/${id}`, { method: "DELETE", headers: sbHeaders() });
-    loadStories();
+  function openFormForDay(dayId) {
+    setFormPresetDay(dayId);
+    setFormDay(String(dayId));
+    setFormType(sbTab==="stories" ? "story" : "image");
+    setFormErr(""); setFormMediaUrl(""); setFormMediaUrls(""); setFormCaption(""); setFormName(""); setFormTime("09:00");
+    setShowForm(true);
   }
 
-  async function deleteFeed(id) {
-    await fetch(`${SB_URL}/feed/${id}`, { method: "DELETE", headers: sbHeaders() });
-    loadFeed();
+  function openFormGeneral() {
+    setFormPresetDay(null);
+    setFormType(sbTab==="stories" ? "story" : "image");
+    setFormErr(""); setFormMediaUrl(""); setFormMediaUrls(""); setFormCaption(""); setFormName(""); setFormDay("1"); setFormTime("09:00");
+    setShowForm(true);
   }
 
   async function submitForm() {
-    setFormLoading(true); setFormErr(""); setFormSuccess("");
+    setFormLoading(true); setFormErr("");
     try {
-      const isStory = formType === "story";
-      const isCarousel = formType === "carousel";
+      const isStory = formType==="story";
+      const isCarousel = formType==="carousel";
       let body, url;
-
-      if (isStory) {
+      if(isStory){
         url = `${SB_URL}/stories`;
-        body = {
-          media_url: formMediaUrl,
-          day_of_week: parseInt(formDay),
-          scheduled_time: formTime,
-          name: formName || undefined,
-          media_type: "story",
-        };
+        body = { media_url:formMediaUrl, day_of_week:parseInt(formDay), scheduled_time:formTime, name:formName||undefined, media_type:"story" };
       } else {
         url = `${SB_URL}/feed`;
-        body = {
-          media_type: formType, // image | video | reel | carousel
-          caption: formCaption || undefined,
-          name: formName || undefined,
-          scheduled_time: formTime,
-          day_of_week: parseInt(formDay),
-        };
-        if (isCarousel) {
-          body.media_urls = formMediaUrls.split(",").map(s => s.trim()).filter(Boolean);
-        } else {
-          body.media_url = formMediaUrl;
-        }
+        body = { media_type:formType, caption:formCaption||undefined, name:formName||undefined, scheduled_time:formTime, day_of_week:parseInt(formDay) };
+        if(isCarousel) body.media_urls = formMediaUrls.split(",").map(s=>s.trim()).filter(Boolean);
+        else body.media_url = formMediaUrl;
       }
-
-      const r = await fetch(url, {
-        method: "POST", headers: sbHeaders(),
-        body: JSON.stringify(body),
-      });
+      const r = await fetch(url, { method:"POST", headers:sbHeaders(), body:JSON.stringify(body) });
       const d = await r.json();
-      if (!r.ok) { setFormErr(d.detail || "Erro ao criar post"); setFormLoading(false); return; }
-      setFormSuccess("Criado com sucesso!");
+      if(!r.ok){ setFormErr(d.detail||"Erro ao criar"); setFormLoading(false); return; }
       setShowForm(false);
-      setFormMediaUrl(""); setFormMediaUrls(""); setFormCaption(""); setFormName(""); setFormDay("1"); setFormTime("09:00");
-      isStory ? loadStories() : loadFeed();
-    } catch(e) { setFormErr("Erro de conexão"); }
+      loadAll();
+    } catch(e){ setFormErr("Erro de conexão"); }
     setFormLoading(false);
   }
 
-  const WEEKDAYS_PT = ["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
-  const STATUS_COLOR = { pending: C.yellow, posted: C.green, failed: C.red, processing: C.cyan };
-
-  // ── Login screen ──
-  if (!sbToken) return (
+  // ── Login ──
+  if(!sbToken) return (
     <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:400,gap:16}}>
       <div style={{background:C.card,borderRadius:16,padding:40,width:"100%",maxWidth:380,border:`1px solid ${C.border}`}}>
         <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:24}}>
-          <div style={{width:40,height:40,borderRadius:10,background:`${C.accent}22`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <MessageSquare size={20} color={C.accent}/>
+          <div style={{width:40,height:40,borderRadius:10,background:"linear-gradient(135deg,#e1306c,#405de6)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <MessageSquare size={20} color="#fff"/>
           </div>
           <div>
             <div style={{color:C.text,fontWeight:700,fontSize:18}}>StoriesBot</div>
-            <div style={{color:C.muted,fontSize:12}}>Entre com sua conta</div>
+            <div style={{color:C.muted,fontSize:12}}>Agendamento Instagram</div>
           </div>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:12}}>
           <input value={sbEmail} onChange={e=>setSbEmail(e.target.value)} placeholder="Email" type="email"
-            style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 14px",color:C.text,fontSize:14,outline:"none"}}/>
+            style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 14px",color:C.text,fontSize:14,outline:"none",width:"100%",boxSizing:"border-box"}}/>
           <input value={sbPass} onChange={e=>setSbPass(e.target.value)} placeholder="Senha" type="password"
             onKeyDown={e=>e.key==="Enter"&&sbLogin()}
-            style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 14px",color:C.text,fontSize:14,outline:"none"}}/>
-          {sbLoginErr && <div style={{color:C.red,fontSize:12}}>{sbLoginErr}</div>}
+            style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 14px",color:C.text,fontSize:14,outline:"none",width:"100%",boxSizing:"border-box"}}/>
+          {sbLoginErr&&<div style={{color:C.red,fontSize:12}}>{sbLoginErr}</div>}
           <button onClick={sbLogin} disabled={sbLoading}
-            style={{background:C.accent,color:"#fff",border:"none",borderRadius:8,padding:"11px",fontWeight:600,fontSize:14,cursor:"pointer",opacity:sbLoading?0.6:1}}>
-            {sbLoading ? "Entrando…" : "Entrar"}
+            style={{background:"linear-gradient(90deg,#e1306c,#405de6)",color:"#fff",border:"none",borderRadius:8,padding:"11px",fontWeight:600,fontSize:14,cursor:"pointer",opacity:sbLoading?0.6:1}}>
+            {sbLoading?"Entrando…":"Entrar"}
           </button>
         </div>
       </div>
     </div>
   );
 
-  // ── Main UI ──
-  const isStoryTab = sbTab === "stories";
-  const items = isStoryTab ? stories : feed;
-  const loading = isStoryTab ? storiesLoading : feedLoading;
+  const currentTab = SB_TABS.find(t=>t.id===sbTab);
+  const currentItems = sbTab==="stories" ? stories : feedItems;
+  const isStory = sbTab==="stories";
+
+  // Totals per tab
+  const counts = {
+    stories: stories.length,
+    feed: feedItems.length,
+  };
 
   return (
-    <div style={{padding:20,maxWidth:900,margin:"0 auto"}}>
+    <div style={{padding:"4px 0"}}>
       {/* Header */}
-      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:20,flexWrap:"wrap",gap:10}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16,flexWrap:"wrap",gap:10}}>
         <div style={{display:"flex",alignItems:"center",gap:10}}>
-          <div style={{width:38,height:38,borderRadius:10,background:`${C.accent}22`,display:"flex",alignItems:"center",justifyContent:"center"}}>
-            <MessageSquare size={18} color={C.accent}/>
+          <div style={{width:38,height:38,borderRadius:10,background:"linear-gradient(135deg,#e1306c,#405de6)",display:"flex",alignItems:"center",justifyContent:"center"}}>
+            <MessageSquare size={18} color="#fff"/>
           </div>
           <div>
             <div style={{color:C.text,fontWeight:700,fontSize:18}}>StoriesBot</div>
-            <div style={{color:C.muted,fontSize:12}}>Instagram via Graph API</div>
+            <div style={{color:C.muted,fontSize:12}}>Kanban semanal · Instagram</div>
           </div>
         </div>
-        <div style={{display:"flex",gap:8,alignItems:"center"}}>
+        <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
           <button onClick={toggleScheduler} style={{
-            background: schedulerOn ? `${C.green}22` : `${C.red}22`,
-            color: schedulerOn ? C.green : C.red,
-            border:`1px solid ${schedulerOn ? C.green : C.red}44`,
+            background:schedulerOn?`${C.green}22`:`${C.red}22`,
+            color:schedulerOn?C.green:C.red,
+            border:`1px solid ${schedulerOn?C.green:C.red}44`,
             borderRadius:8,padding:"6px 14px",fontSize:12,fontWeight:600,cursor:"pointer"
-          }}>
-            {schedulerOn ? "⏰ Scheduler ON" : "⏸ Scheduler OFF"}
+          }}>{schedulerOn?"⏰ Scheduler ON":"⏸ Scheduler OFF"}</button>
+          <button onClick={()=>loadAll()} style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 12px",color:C.muted,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
+            <RefreshCw size={12}/> Atualizar
           </button>
-          <button onClick={()=>setShowForm(true)} style={{background:C.accent,color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontWeight:600,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+          <button onClick={openFormGeneral} style={{background:`linear-gradient(90deg,${currentTab.color},${C.accent})`,color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontWeight:600,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
             <PlusCircle size={15}/> Novo Post
           </button>
         </div>
       </div>
 
       {/* Tabs */}
-      <div style={{display:"flex",gap:6,marginBottom:20,background:C.card2,borderRadius:10,padding:4,width:"fit-content"}}>
-        {[["stories","📸 Stories"],["feed","🖼 Feed / Reels"]].map(([id,label])=>(
+      <div style={{display:"flex",gap:4,marginBottom:16,background:C.card2,borderRadius:10,padding:4,width:"fit-content"}}>
+        {SB_TABS.map(({id,label,color})=>(
           <button key={id} onClick={()=>setSbTab(id)} style={{
-            background: sbTab===id ? C.accent : "transparent",
-            color: sbTab===id ? "#fff" : C.muted,
-            border:"none",borderRadius:8,padding:"7px 18px",fontWeight:600,fontSize:13,cursor:"pointer",transition:"all .15s"
-          }}>{label}</button>
+            background:sbTab===id?color:"transparent",
+            color:sbTab===id?"#fff":C.muted,
+            border:"none",borderRadius:7,padding:"7px 16px",fontWeight:600,fontSize:13,cursor:"pointer",transition:"all .15s",
+            display:"flex",alignItems:"center",gap:6,
+          }}>
+            {label}
+            <span style={{background:sbTab===id?"rgba(255,255,255,0.25)":C.border,borderRadius:99,padding:"1px 6px",fontSize:10,fontWeight:700,color:sbTab===id?"#fff":C.muted}}>
+              {counts[id]}
+            </span>
+          </button>
         ))}
       </div>
 
-      {/* Refresh */}
-      <div style={{display:"flex",justifyContent:"flex-end",marginBottom:12}}>
-        <button onClick={()=>isStoryTab?loadStories():loadFeed()} style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:8,padding:"5px 12px",color:C.muted,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
-          <RefreshCw size={12}/> Atualizar
-        </button>
-      </div>
-
-      {/* List */}
-      {loading ? (
-        <div style={{textAlign:"center",color:C.muted,padding:40}}><Loader size={24} style={{animation:"spin 1s linear infinite"}}/></div>
-      ) : items.length === 0 ? (
-        <div style={{textAlign:"center",color:C.muted,padding:40,background:C.card,borderRadius:12,border:`1px solid ${C.border}`}}>
-          Nenhum item agendado ainda.
-        </div>
+      {/* Kanban */}
+      {dataLoading ? (
+        <div style={{textAlign:"center",color:C.muted,padding:60}}><Loader size={28} style={{animation:"spin 1s linear infinite"}}/></div>
       ) : (
-        <div style={{display:"flex",flexDirection:"column",gap:10}}>
-          {items.map(item => {
-            const statusColor = STATUS_COLOR[item.status] || C.muted;
-            return (
-              <div key={item.id} style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"14px 18px",display:"flex",alignItems:"center",gap:14,flexWrap:"wrap"}}>
-                {/* Thumbnail */}
-                {item.media_url && (
-                  <img src={item.media_url} alt="" style={{width:52,height:52,borderRadius:8,objectFit:"cover",border:`1px solid ${C.border}`,flexShrink:0}}
-                    onError={e=>{e.target.style.display="none";}}/>
-                )}
-                <div style={{flex:1,minWidth:0}}>
-                  <div style={{color:C.text,fontWeight:600,fontSize:14,marginBottom:2}}>{item.name || item.media_type || (isStoryTab?"Story":"Post")}</div>
-                  <div style={{color:C.muted,fontSize:12,display:"flex",gap:10,flexWrap:"wrap"}}>
-                    {item.day_of_week != null && <span>📅 {WEEKDAYS_PT[item.day_of_week]}</span>}
-                    {item.scheduled_time && <span>🕐 {item.scheduled_time}</span>}
-                    {item.media_type && <span>📌 {item.media_type}</span>}
-                    {item.caption && <span style={{maxWidth:200,overflow:"hidden",textOverflow:"ellipsis",whiteSpace:"nowrap"}}>💬 {item.caption}</span>}
-                  </div>
-                </div>
-                <div style={{display:"flex",alignItems:"center",gap:8,flexShrink:0}}>
-                  <span style={{background:`${statusColor}22`,color:statusColor,borderRadius:6,padding:"3px 10px",fontSize:11,fontWeight:600}}>
-                    {item.status || "pending"}
-                  </span>
-                  {item.status === "pending" && (
-                    <button onClick={()=>isStoryTab?postNowStory(item.id):postNowFeed(item.id)}
-                      style={{background:`${C.green}22`,color:C.green,border:"none",borderRadius:7,padding:"5px 10px",fontSize:12,cursor:"pointer",fontWeight:600}}>
-                      ▶ Postar
-                    </button>
-                  )}
-                  <button onClick={()=>isStoryTab?deleteStory(item.id):deleteFeed(item.id)}
-                    style={{background:`${C.red}15`,color:C.red,border:"none",borderRadius:7,padding:"5px 8px",cursor:"pointer"}}>
-                    <Trash2 size={13}/>
-                  </button>
-                </div>
-              </div>
-            );
-          })}
-        </div>
+        <SbKanban
+          items={currentItems}
+          onPostNow={handlePostNow}
+          onDelete={handleDelete}
+          onAddInDay={openFormForDay}
+        />
       )}
 
-      {/* New Post Modal */}
-      {showForm && (
-        <div style={{position:"fixed",inset:0,background:"#000a",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
-          <div style={{background:C.card,borderRadius:16,padding:28,width:"100%",maxWidth:460,border:`1px solid ${C.border}`,maxHeight:"90vh",overflowY:"auto"}}>
+      {/* Stats bar */}
+      <div style={{display:"flex",gap:12,marginTop:16,flexWrap:"wrap"}}>
+        {(["pending","posted","failed"] ).map(st=>{
+          const count = currentItems.filter(it=>it.status===st).length;
+          const col = SB_STATUS_COLOR[st]||C.muted;
+          return count>0 ? (
+            <span key={st} style={{background:`${col}18`,color:col,borderRadius:7,padding:"4px 12px",fontSize:12,fontWeight:600}}>
+              {st==="pending"?"⏳":st==="posted"?"✅":"❌"} {count} {st}
+            </span>
+          ) : null;
+        })}
+      </div>
+
+      {/* Form Modal */}
+      {showForm&&(
+        <div style={{position:"fixed",inset:0,background:"#000b",zIndex:1000,display:"flex",alignItems:"center",justifyContent:"center",padding:16}}>
+          <div style={{background:C.card,borderRadius:16,padding:28,width:"100%",maxWidth:460,border:`1px solid ${C.border}`,maxHeight:"92vh",overflowY:"auto"}}>
             <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:20}}>
               <div style={{color:C.text,fontWeight:700,fontSize:16}}>Novo Post</div>
-              <button onClick={()=>{setShowForm(false);setFormErr("");}} style={{background:"transparent",border:"none",color:C.muted,cursor:"pointer"}}><X size={18}/></button>
+              <button onClick={()=>setShowForm(false)} style={{background:"transparent",border:"none",color:C.muted,cursor:"pointer"}}><X size={18}/></button>
             </div>
-
             <div style={{display:"flex",flexDirection:"column",gap:13}}>
-              {/* Type selector */}
+              {/* Tipo */}
               <div>
                 <div style={{color:C.muted,fontSize:12,marginBottom:6}}>Tipo</div>
                 <div style={{display:"flex",gap:6,flexWrap:"wrap"}}>
                   {[["story","📸 Story"],["image","🖼 Feed"],["video","🎬 Vídeo"],["reel","🎭 Reel"],["carousel","🎠 Carrossel"]].map(([id,label])=>(
                     <button key={id} onClick={()=>setFormType(id)} style={{
-                      background:formType===id?C.accent:`${C.border}55`,
-                      color:formType===id?"#fff":C.muted,
+                      background:formType===id?C.accent:`${C.border}55`,color:formType===id?"#fff":C.muted,
                       border:"none",borderRadius:7,padding:"6px 12px",fontSize:12,fontWeight:600,cursor:"pointer"
                     }}>{label}</button>
                   ))}
                 </div>
               </div>
-
-              {/* Name */}
+              {/* Nome */}
               <div>
                 <div style={{color:C.muted,fontSize:12,marginBottom:4}}>Nome (opcional)</div>
                 <input value={formName} onChange={e=>setFormName(e.target.value)} placeholder="Ex: Promo segunda"
                   style={{width:"100%",background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 12px",color:C.text,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
               </div>
-
-              {/* Media URL — single */}
-              {formType !== "carousel" && (
+              {/* URL mídia single */}
+              {formType!=="carousel"&&(
                 <div>
-                  <div style={{color:C.muted,fontSize:12,marginBottom:4}}>URL da mídia (Cloudinary)</div>
+                  <div style={{color:C.muted,fontSize:12,marginBottom:4}}>URL da mídia</div>
                   <input value={formMediaUrl} onChange={e=>setFormMediaUrl(e.target.value)} placeholder="https://res.cloudinary.com/..."
                     style={{width:"100%",background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 12px",color:C.text,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
                 </div>
               )}
-
-              {/* Media URLs — carousel */}
-              {formType === "carousel" && (
+              {/* URLs carrossel */}
+              {formType==="carousel"&&(
                 <div>
-                  <div style={{color:C.muted,fontSize:12,marginBottom:4}}>URLs das mídias (separadas por vírgula)</div>
+                  <div style={{color:C.muted,fontSize:12,marginBottom:4}}>URLs separadas por vírgula</div>
                   <textarea value={formMediaUrls} onChange={e=>setFormMediaUrls(e.target.value)} rows={3}
                     placeholder="https://url1.jpg, https://url2.jpg"
                     style={{width:"100%",background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 12px",color:C.text,fontSize:13,outline:"none",resize:"vertical",boxSizing:"border-box"}}/>
                 </div>
               )}
-
-              {/* Caption (feed only) */}
-              {formType !== "story" && (
+              {/* Legenda (não story) */}
+              {formType!=="story"&&(
                 <div>
                   <div style={{color:C.muted,fontSize:12,marginBottom:4}}>Legenda</div>
                   <textarea value={formCaption} onChange={e=>setFormCaption(e.target.value)} rows={3}
-                    placeholder="Escreva a legenda do post..."
+                    placeholder="Escreva a legenda..."
                     style={{width:"100%",background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 12px",color:C.text,fontSize:13,outline:"none",resize:"vertical",boxSizing:"border-box"}}/>
                 </div>
               )}
-
-              {/* Day of week */}
+              {/* Dia */}
               <div>
                 <div style={{color:C.muted,fontSize:12,marginBottom:4}}>Dia da semana</div>
-                <select value={formDay} onChange={e=>setFormDay(e.target.value)}
-                  style={{width:"100%",background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 12px",color:C.text,fontSize:13,outline:"none"}}>
-                  {WEEKDAYS_PT.map((d,i)=><option key={i} value={i}>{d}</option>)}
-                </select>
+                <div style={{display:"flex",gap:5,flexWrap:"wrap"}}>
+                  {SB_DAYS.map(({id,label})=>(
+                    <button key={id} onClick={()=>setFormDay(String(id))} style={{
+                      background:formDay===String(id)?C.accent:`${C.border}55`,
+                      color:formDay===String(id)?"#fff":C.muted,
+                      border:"none",borderRadius:7,padding:"6px 10px",fontSize:12,fontWeight:600,cursor:"pointer"
+                    }}>{label}</button>
+                  ))}
+                </div>
               </div>
-
-              {/* Time */}
+              {/* Horário */}
               <div>
                 <div style={{color:C.muted,fontSize:12,marginBottom:4}}>Horário</div>
                 <input type="time" value={formTime} onChange={e=>setFormTime(e.target.value)}
                   style={{width:"100%",background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 12px",color:C.text,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
               </div>
-
-              {formErr && <div style={{color:C.red,fontSize:12}}>{formErr}</div>}
-              {formSuccess && <div style={{color:C.green,fontSize:12}}>{formSuccess}</div>}
-
+              {formErr&&<div style={{color:C.red,fontSize:12}}>{formErr}</div>}
               <div style={{display:"flex",gap:8,marginTop:4}}>
-                <button onClick={()=>{setShowForm(false);setFormErr("");}} style={{flex:1,background:`${C.border}55`,color:C.muted,border:"none",borderRadius:8,padding:"10px",cursor:"pointer",fontWeight:600,fontSize:13}}>
+                <button onClick={()=>setShowForm(false)} style={{flex:1,background:`${C.border}55`,color:C.muted,border:"none",borderRadius:8,padding:"10px",cursor:"pointer",fontWeight:600,fontSize:13}}>
                   Cancelar
                 </button>
                 <button onClick={submitForm} disabled={formLoading} style={{flex:2,background:C.accent,color:"#fff",border:"none",borderRadius:8,padding:"10px",cursor:"pointer",fontWeight:600,fontSize:13,opacity:formLoading?0.6:1}}>
-                  {formLoading ? "Criando…" : "Criar Post"}
+                  {formLoading?"Criando…":"Criar Post"}
                 </button>
               </div>
             </div>
