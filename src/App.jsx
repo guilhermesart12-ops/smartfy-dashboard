@@ -1145,7 +1145,7 @@ function Integracoes({onMetaData,onKommoData}){
 }
 
 // ─── STORIESBOT ───────────────────────────────────────────────────────────────
-const SB_URL = "https://storiebot-production.up.railway.app";
+const SB_URL = "https://storiebot.onrender.com";
 
 function StoriesBot() {
   const [sbToken, setSbToken] = useState(null);
