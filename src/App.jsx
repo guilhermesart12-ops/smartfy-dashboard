@@ -1306,14 +1306,35 @@ const SB_TYPE_TAG = {
   carousel: {label:"Carrossel", bg:"#f59e0b22", color:"#f59e0b"},
 };
 
+// Helper: get first usable thumbnail URL from a story or feed item
+function sbThumb(item){
+  // stories have media_url (string)
+  if(item.media_url) return item.media_url;
+  // feed items have media_urls as comma-separated string
+  if(item.media_urls && typeof item.media_urls==="string"){
+    const first = item.media_urls.split(",")[0].trim();
+    if(first) return first;
+  }
+  if(Array.isArray(item.media_urls) && item.media_urls[0]) return item.media_urls[0];
+  return null;
+}
+
 function SbCard({item, onPostNow, onDelete}){
   const [posting, setPosting] = useState(false);
   const [posted, setPosted] = useState(false);
   const [confirm, setConfirm] = useState(false);
   const sc = SB_STATUS_COLOR[item.status] || C.muted;
-  // Normalize media_type for display (backend may return uppercase)
+  // Normalize media_type for display (backend returns uppercase for feed)
   const mtKey = (item.media_type||"").toLowerCase().replace("carousel_album","carousel");
   const typeTag = SB_TYPE_TAG[mtKey] || {label:item.media_type||"Post", bg:C.border+"33", color:C.muted};
+  const thumb = sbThumb(item);
+
+  // scheduled_at for feed items, scheduled_time for stories
+  const timeLabel = item.scheduled_time || (item.scheduled_at ? item.scheduled_at.slice(11,16) : null);
+  // day label for feed: derive from scheduled_at date
+  const dayLabel = item.scheduled_at
+    ? ["DOM","SEG","TER","QUA","QUI","SEX","SÁB"][new Date(item.scheduled_at).getDay()]
+    : null;
 
   async function handlePostNow(){
     if(!confirm){ setConfirm(true); setTimeout(()=>setConfirm(false),3000); return; }
@@ -1326,8 +1347,8 @@ function SbCard({item, onPostNow, onDelete}){
   return (
     <div style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 12px",marginBottom:8,cursor:"default"}}>
       {/* Thumbnail */}
-      {item.media_url && (
-        <img src={item.media_url} alt="" onError={e=>{e.target.style.display="none";}}
+      {thumb && (
+        <img src={thumb} alt="" onError={e=>{e.target.style.display="none";}}
           style={{width:"100%",height:78,objectFit:"cover",borderRadius:7,marginBottom:8,border:`1px solid ${C.border}`}}/>
       )}
       {/* Type tag + name */}
@@ -1339,33 +1360,37 @@ function SbCard({item, onPostNow, onDelete}){
           {item.name || ""}
         </span>
       </div>
-      {item.scheduled_time && (
-        <div style={{color:C.muted,fontSize:11,marginBottom:4}}>🕐 {item.scheduled_time}</div>
+      {(timeLabel||dayLabel) && (
+        <div style={{color:C.muted,fontSize:11,marginBottom:4}}>
+          {dayLabel&&<span>📅 {dayLabel} </span>}{timeLabel&&<span>🕐 {timeLabel}</span>}
+        </div>
       )}
       {item.caption && (
         <div style={{color:C.muted,fontSize:11,marginBottom:5,display:"-webkit-box",WebkitLineClamp:2,WebkitBoxOrient:"vertical",overflow:"hidden"}}>
           💬 {item.caption}
         </div>
       )}
-      {/* Postar Agora — full width quando pending */}
+      {item.error_message && (
+        <div style={{color:C.red,fontSize:10,marginBottom:5,background:`${C.red}11`,borderRadius:5,padding:"3px 6px"}}>
+          ⚠️ {item.error_message}
+        </div>
+      )}
+      {/* Postar Agora — full width quando pending/failed */}
       {(item.status==="pending"||item.status==="failed")&&(
-        <button
-          onClick={handlePostNow}
-          disabled={posting}
-          style={{
-            width:"100%",
-            background: posted ? `${C.green}22` : confirm ? "#ff990022" : `${C.green}18`,
-            color: posted ? C.green : confirm ? "#ff9900" : C.green,
-            border:`1px solid ${posted?C.green:confirm?"#ff9900":C.green}44`,
-            borderRadius:7,padding:"6px 0",fontSize:12,fontWeight:700,
-            cursor:posting?"not-allowed":"pointer",
-            marginBottom:7,transition:"all .15s",
-            display:"flex",alignItems:"center",justifyContent:"center",gap:5,
-          }}>
-          {posting ? <><Loader size={11} style={{animation:"spin 1s linear infinite"}}/> Postando…</>
-           : posted ? <>✅ Postado!</>
-           : confirm ? <>⚠️ Confirmar post agora?</>
-           : <>▶ Postar Agora</>}
+        <button onClick={handlePostNow} disabled={posting} style={{
+          width:"100%",
+          background: posted?`${C.green}22`:confirm?"#ff990022":`${C.green}18`,
+          color: posted?C.green:confirm?"#ff9900":C.green,
+          border:`1px solid ${posted?C.green:confirm?"#ff9900":C.green}44`,
+          borderRadius:7,padding:"6px 0",fontSize:12,fontWeight:700,
+          cursor:posting?"not-allowed":"pointer",
+          marginBottom:7,transition:"all .15s",
+          display:"flex",alignItems:"center",justifyContent:"center",gap:5,
+        }}>
+          {posting?<><Loader size={11} style={{animation:"spin 1s linear infinite"}}/> Postando…</>
+           :posted?<>✅ Postado!</>
+           :confirm?<>⚠️ Confirmar?</>
+           :<>▶ Postar Agora</>}
         </button>
       )}
       <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
@@ -1381,47 +1406,68 @@ function SbCard({item, onPostNow, onDelete}){
   );
 }
 
-function SbKanban({items, onPostNow, onDelete, onAddInDay}){
+// Get day_of_week for any item (stories have day_of_week, feed has scheduled_at)
+function sbItemDay(item){
+  if(item.day_of_week != null) return item.day_of_week;
+  if(item.scheduled_at) return new Date(item.scheduled_at).getDay();
+  return -1; // no day assigned
+}
+
+function SbKanban({items, onPostNow, onDelete, onAddInDay, isFeed}){
   const today = new Date().getDay();
+  const unscheduled = isFeed ? items.filter(it=>!it.scheduled_at) : [];
   return (
-    <div style={{display:"grid",gridTemplateColumns:"repeat(7,minmax(120px,1fr))",gap:8,overflowX:"auto",paddingBottom:8}}>
-      {SB_DAYS.map(({id,label})=>{
-        const dayItems = items.filter(it=>it.day_of_week===id);
-        const isToday = id===today;
-        return (
-          <div key={id} style={{
-            background: isToday ? `${C.accent}11` : C.card,
-            border:`1px solid ${isToday?C.accent:C.border}`,
-            borderRadius:10,padding:"10px 8px",minHeight:180,
-          }}>
-            <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
-              <span style={{color:isToday?C.accent:C.muted,fontWeight:700,fontSize:12,letterSpacing:"0.05em"}}>
-                {label}{isToday&&" ●"}
-              </span>
-              <div style={{display:"flex",alignItems:"center",gap:4}}>
-                <span style={{background:C.border,color:C.muted,borderRadius:99,width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700}}>
-                  {dayItems.length}
+    <div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,minmax(130px,1fr))",gap:8,overflowX:"auto",paddingBottom:8}}>
+        {SB_DAYS.map(({id,label})=>{
+          const dayItems = items.filter(it=>sbItemDay(it)===id);
+          const isToday = id===today;
+          return (
+            <div key={id} style={{
+              background: isToday?`${C.accent}11`:C.card,
+              border:`1px solid ${isToday?C.accent:C.border}`,
+              borderRadius:10,padding:"10px 8px",minHeight:180,
+            }}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+                <span style={{color:isToday?C.accent:C.muted,fontWeight:700,fontSize:12,letterSpacing:"0.05em"}}>
+                  {label}{isToday&&" ●"}
                 </span>
-                <button onClick={()=>onAddInDay(id)}
-                  style={{background:"transparent",border:"none",color:C.muted,cursor:"pointer",padding:0,display:"flex",alignItems:"center"}}
-                  title="Adicionar">
-                  <PlusCircle size={14}/>
-                </button>
+                <div style={{display:"flex",alignItems:"center",gap:4}}>
+                  <span style={{background:C.border,color:C.muted,borderRadius:99,width:18,height:18,display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,fontWeight:700}}>
+                    {dayItems.length}
+                  </span>
+                  <button onClick={()=>onAddInDay(id)}
+                    style={{background:"transparent",border:"none",color:C.muted,cursor:"pointer",padding:0,display:"flex",alignItems:"center"}}
+                    title="Adicionar">
+                    <PlusCircle size={14}/>
+                  </button>
+                </div>
               </div>
+              {dayItems.length===0 ? (
+                <div style={{textAlign:"center",color:C.border,padding:"20px 0",fontSize:11}}>
+                  <MessageSquare size={20} style={{opacity:0.3,display:"block",margin:"0 auto 6px"}}/>
+                  Vazio
+                </div>
+              ) : (
+                dayItems.map(item=>(
+                  <SbCard key={item.id} item={item} onPostNow={onPostNow} onDelete={onDelete}/>
+                ))
+              )}
             </div>
-            {dayItems.length===0 ? (
-              <div style={{textAlign:"center",color:C.border,padding:"20px 0",fontSize:11}}>
-                <MessageSquare size={20} style={{opacity:0.3,display:"block",margin:"0 auto 6px"}}/>
-                Vazio
-              </div>
-            ) : (
-              dayItems.map(item=>(
-                <SbCard key={item.id} item={item} onPostNow={onPostNow} onDelete={onDelete}/>
-              ))
-            )}
+          );
+        })}
+      </div>
+      {/* Feed items sem data agendada */}
+      {unscheduled.length>0&&(
+        <div style={{marginTop:12,background:C.card,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 12px"}}>
+          <div style={{color:C.muted,fontWeight:700,fontSize:12,marginBottom:8}}>📥 Sem data agendada ({unscheduled.length})</div>
+          <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(160px,1fr))",gap:8}}>
+            {unscheduled.map(item=>(
+              <SbCard key={item.id} item={item} onPostNow={onPostNow} onDelete={onDelete}/>
+            ))}
           </div>
-        );
-      })}
+        </div>
+      )}
     </div>
   );
 }
@@ -1528,11 +1574,17 @@ function StoriesBot() {
   }
 
   async function handlePostNow(id) {
-    if(sbTab==="stories"){
-      await fetch(`${SB_URL}/stories/post-now`, { method:"POST", headers:sbHeaders(), body:JSON.stringify({story_id:id}) });
-    } else {
-      await fetch(`${SB_URL}/feed/${id}/post-now`, { method:"POST", headers:sbHeaders() });
-    }
+    try {
+      if(sbTab==="stories"){
+        // /stories/post-now takes day_of_week as query param (posts ALL stories for that day)
+        // To post a single story, use day_of_week of that story
+        const story = stories.find(s=>s.id===id);
+        const qp = story ? `?day_of_week=${story.day_of_week}` : "";
+        await fetch(`${SB_URL}/stories/post-now${qp}`, { method:"POST", headers:sbHeaders() });
+      } else {
+        await fetch(`${SB_URL}/feed/${id}/post-now`, { method:"POST", headers:sbHeaders() });
+      }
+    } catch(e){}
     loadAll();
   }
 
@@ -1581,20 +1633,32 @@ function StoriesBot() {
         url = `${SB_URL}/stories`;
         body = { media_url:formMediaUrl.trim(), day_of_week:parseInt(formDay), scheduled_time:formTime, name:formName||undefined, media_type:"story" };
       } else {
-        // Mapear tipos internos → valores que o backend/Instagram aceita
-        const MEDIA_TYPE_MAP = {
-          image: "IMAGE",
-          video: "VIDEO",
-          reel:  "REEL",
-          carousel: "CAROUSEL_ALBUM",
-        };
+        // /feed API: media_type uppercase, media_urls always array, scheduled_at as ISO or null
+        const MEDIA_TYPE_MAP = { image:"IMAGE", video:"VIDEO", reel:"REEL", carousel:"CAROUSEL_ALBUM" };
+        const mediaType = MEDIA_TYPE_MAP[formType] || formType.toUpperCase();
+        // Build scheduled_at: pick next occurrence of chosen day_of_week at formTime
+        // e.g. if user chose SEG (1) and 09:00, find next Monday
+        const targetDay = parseInt(formDay); // 0=Sun..6=Sat
+        const now = new Date();
+        const daysUntil = (targetDay - now.getDay() + 7) % 7 || 7; // at least 1 day ahead if same day
+        const targetDate = new Date(now);
+        targetDate.setDate(now.getDate() + daysUntil);
+        const [hh,mm] = formTime.split(":");
+        targetDate.setHours(parseInt(hh), parseInt(mm), 0, 0);
+        const scheduledAt = `${targetDate.getFullYear()}-${String(targetDate.getMonth()+1).padStart(2,"0")}-${String(targetDate.getDate()).padStart(2,"0")}T${formTime}`;
+
+        const mediaUrlsArray = isCarousel
+          ? formMediaUrls.map(s=>s.trim()).filter(Boolean)
+          : [formMediaUrl.trim()];
+
         url = `${SB_URL}/feed`;
-        body = { media_type: MEDIA_TYPE_MAP[formType]||formType.toUpperCase(), caption:formCaption||undefined, name:formName||undefined, scheduled_time:formTime, day_of_week:parseInt(formDay) };
-        if(isCarousel){
-          body.media_urls = formMediaUrls.map(s=>s.trim()).filter(Boolean);
-        } else {
-          body.media_url = formMediaUrl.trim();
-        }
+        body = {
+          media_type: mediaType,
+          media_urls: mediaUrlsArray,
+          caption: formCaption || undefined,
+          name: formName || undefined,
+          scheduled_at: scheduledAt,
+        };
       }
       const r = await fetch(url, { method:"POST", headers:sbHeaders(), body:JSON.stringify(body) });
       let d;
@@ -1719,6 +1783,7 @@ function StoriesBot() {
           onPostNow={handlePostNow}
           onDelete={handleDelete}
           onAddInDay={openFormForDay}
+          isFeed={sbTab==="feed"}
         />
       )}
 
