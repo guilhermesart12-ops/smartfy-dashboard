@@ -1419,7 +1419,7 @@ function StoriesBot() {
   const [formPresetDay, setFormPresetDay] = useState(null);
   const [formType, setFormType] = useState("story");
   const [formMediaUrl, setFormMediaUrl] = useState("");
-  const [formMediaUrls, setFormMediaUrls] = useState("");
+  const [formMediaUrls, setFormMediaUrls] = useState(["",""]); // array of up to 20 URLs
   const [formCaption, setFormCaption] = useState("");
   const [formName, setFormName] = useState("");
   const [formDay, setFormDay] = useState("1");
@@ -1501,14 +1501,14 @@ function StoriesBot() {
     setFormPresetDay(dayId);
     setFormDay(String(dayId));
     setFormType(sbTab==="stories" ? "story" : "image");
-    setFormErr(""); setFormMediaUrl(""); setFormMediaUrls(""); setFormCaption(""); setFormName(""); setFormTime("09:00");
+    setFormErr(""); setFormMediaUrl(""); setFormMediaUrls(["",""]); setFormCaption(""); setFormName(""); setFormTime("09:00");
     setShowForm(true);
   }
 
   function openFormGeneral() {
     setFormPresetDay(null);
     setFormType(sbTab==="stories" ? "story" : "image");
-    setFormErr(""); setFormMediaUrl(""); setFormMediaUrls(""); setFormCaption(""); setFormName(""); setFormDay("1"); setFormTime("09:00");
+    setFormErr(""); setFormMediaUrl(""); setFormMediaUrls(["",""]); setFormCaption(""); setFormName(""); setFormDay("1"); setFormTime("09:00");
     setShowForm(true);
   }
 
@@ -1524,7 +1524,7 @@ function StoriesBot() {
       } else {
         url = `${SB_URL}/feed`;
         body = { media_type:formType, caption:formCaption||undefined, name:formName||undefined, scheduled_time:formTime, day_of_week:parseInt(formDay) };
-        if(isCarousel) body.media_urls = formMediaUrls.split(",").map(s=>s.trim()).filter(Boolean);
+        if(isCarousel) body.media_urls = formMediaUrls.map(s=>s.trim()).filter(Boolean);
         else body.media_url = formMediaUrl;
       }
       const r = await fetch(url, { method:"POST", headers:sbHeaders(), body:JSON.stringify(body) });
@@ -1681,13 +1681,44 @@ function StoriesBot() {
                     style={{width:"100%",background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 12px",color:C.text,fontSize:13,outline:"none",boxSizing:"border-box"}}/>
                 </div>
               )}
-              {/* URLs carrossel */}
+              {/* URLs carrossel — até 20 campos individuais */}
               {formType==="carousel"&&(
                 <div>
-                  <div style={{color:C.muted,fontSize:12,marginBottom:4}}>URLs separadas por vírgula</div>
-                  <textarea value={formMediaUrls} onChange={e=>setFormMediaUrls(e.target.value)} rows={3}
-                    placeholder="https://url1.jpg, https://url2.jpg"
-                    style={{width:"100%",background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"9px 12px",color:C.text,fontSize:13,outline:"none",resize:"vertical",boxSizing:"border-box"}}/>
+                  <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:8}}>
+                    <span style={{color:C.muted,fontSize:12}}>Mídias do carrossel <span style={{color:C.accent}}>({formMediaUrls.filter(u=>u.trim()).length}/20)</span></span>
+                    {formMediaUrls.length < 20 && (
+                      <button onClick={()=>setFormMediaUrls(prev=>[...prev,""])}
+                        style={{background:`${C.accent}22`,color:C.accent,border:"none",borderRadius:6,padding:"4px 10px",fontSize:12,fontWeight:700,cursor:"pointer",display:"flex",alignItems:"center",gap:4}}>
+                        <PlusCircle size={12}/> Adicionar
+                      </button>
+                    )}
+                  </div>
+                  <div style={{display:"flex",flexDirection:"column",gap:7,maxHeight:320,overflowY:"auto",paddingRight:2}}>
+                    {formMediaUrls.map((url,idx)=>(
+                      <div key={idx} style={{display:"flex",alignItems:"center",gap:6}}>
+                        <span style={{color:C.muted,fontSize:11,fontWeight:700,minWidth:20,textAlign:"right"}}>{idx+1}.</span>
+                        <input
+                          value={url}
+                          onChange={e=>{
+                            const next=[...formMediaUrls];
+                            next[idx]=e.target.value;
+                            setFormMediaUrls(next);
+                          }}
+                          placeholder={`https://res.cloudinary.com/... (mídia ${idx+1})`}
+                          style={{flex:1,background:C.card2,border:`1px solid ${url.trim()?C.accent:C.border}`,borderRadius:8,padding:"8px 10px",color:C.text,fontSize:12,outline:"none",boxSizing:"border-box"}}
+                        />
+                        {formMediaUrls.length > 2 && (
+                          <button onClick={()=>setFormMediaUrls(prev=>prev.filter((_,i)=>i!==idx))}
+                            style={{background:`${C.red}15`,color:C.red,border:"none",borderRadius:6,padding:"5px 7px",cursor:"pointer",flexShrink:0}}>
+                            <X size={12}/>
+                          </button>
+                        )}
+                      </div>
+                    ))}
+                  </div>
+                  <div style={{color:C.muted,fontSize:11,marginTop:8}}>
+                    💡 Mínimo 2 mídias. Podem ser imagens (.jpg/.png) ou vídeos (.mp4). Máximo 20.
+                  </div>
                 </div>
               )}
               {/* Legenda (não story) */}
