@@ -1399,10 +1399,14 @@ function SbKanban({items, onPostNow, onDelete, onAddInDay}){
   );
 }
 
+const SB_TOKEN_KEY = "sb_token";
+const SB_EMAIL_KEY = "sb_email";
+
 function StoriesBot() {
-  const [sbToken, setSbToken] = useState(null);
-  const [sbEmail, setSbEmail] = useState("");
+  const [sbToken, setSbToken] = useState(()=>{ try{return localStorage.getItem(SB_TOKEN_KEY)||null;}catch{return null;} });
+  const [sbEmail, setSbEmail] = useState(()=>{ try{return localStorage.getItem(SB_EMAIL_KEY)||"";}catch{return "";} });
   const [sbPass, setSbPass] = useState("");
+  const [sbRemember, setSbRemember] = useState(true);
   const [sbLoginErr, setSbLoginErr] = useState("");
   const [sbLoading, setSbLoading] = useState(false);
 
@@ -1446,26 +1450,43 @@ function StoriesBot() {
       const d = await r.json();
       if (!r.ok) { setSbLoginErr(d.detail || "Erro no login"); setSbLoading(false); return; }
       setSbToken(d.access_token);
+      try {
+        if(sbRemember){
+          localStorage.setItem(SB_TOKEN_KEY, d.access_token);
+          localStorage.setItem(SB_EMAIL_KEY, sbEmail);
+        }
+      } catch{}
       loadAll(d.access_token);
     } catch(e) { setSbLoginErr("Erro de conexão"); }
     setSbLoading(false);
   }
 
+  function sbLogout() {
+    setSbToken(null);
+    try { localStorage.removeItem(SB_TOKEN_KEY); localStorage.removeItem(SB_EMAIL_KEY); } catch{}
+  }
+
+  // Auto-load when token is restored from localStorage
+  useEffect(()=>{ if(sbToken) loadAll(sbToken); },[]);
+
   async function loadAll(tok) {
+    const t = tok||sbToken;
+    if(!t) return;
     setDataLoading(true);
     try {
       const [rs, rf] = await Promise.all([
-        fetch(`${SB_URL}/stories`, { headers: sbHeaders(tok||sbToken) }),
-        fetch(`${SB_URL}/feed`,    { headers: sbHeaders(tok||sbToken) }),
+        fetch(`${SB_URL}/stories`, { headers: sbHeaders(t) }),
+        fetch(`${SB_URL}/feed`,    { headers: sbHeaders(t) }),
       ]);
+      // Token expirado
+      if(rs.status===401||rf.status===401){ sbLogout(); setDataLoading(false); return; }
       const [ds, df] = await Promise.all([rs.json(), rf.json()]);
       setStories(Array.isArray(ds) ? ds : []);
-      setFeedItems(Array.isArray(df) ? df : []); // all feed types: image/video/reel/carousel
+      setFeedItems(Array.isArray(df) ? df : []);
     } catch(e) {}
     setDataLoading(false);
-    // also load scheduler
     try {
-      const r = await fetch(`${SB_URL}/scheduler/status`, { headers: sbHeaders(tok||sbToken) });
+      const r = await fetch(`${SB_URL}/scheduler/status`, { headers: sbHeaders(t) });
       const d = await r.json();
       setSchedulerOn(d.enabled ?? true);
     } catch(e) {}
@@ -1513,26 +1534,52 @@ function StoriesBot() {
   }
 
   async function submitForm() {
-    setFormLoading(true); setFormErr("");
+    setFormErr("");
+    // Validações antes de enviar
+    const isStory = formType==="story";
+    const isCarousel = formType==="carousel";
+    if(isCarousel){
+      const validUrls = formMediaUrls.map(s=>s.trim()).filter(Boolean);
+      if(validUrls.length < 2){ setFormErr("Carrossel precisa de no mínimo 2 mídias."); return; }
+      if(validUrls.length > 20){ setFormErr("Máximo de 20 mídias no carrossel."); return; }
+    } else if(!isStory && !formMediaUrl.trim()){
+      setFormErr("URL da mídia é obrigatória."); return;
+    } else if(isStory && !formMediaUrl.trim()){
+      setFormErr("URL da mídia é obrigatória."); return;
+    }
+    setFormLoading(true);
     try {
-      const isStory = formType==="story";
-      const isCarousel = formType==="carousel";
       let body, url;
       if(isStory){
         url = `${SB_URL}/stories`;
-        body = { media_url:formMediaUrl, day_of_week:parseInt(formDay), scheduled_time:formTime, name:formName||undefined, media_type:"story" };
+        body = { media_url:formMediaUrl.trim(), day_of_week:parseInt(formDay), scheduled_time:formTime, name:formName||undefined, media_type:"story" };
       } else {
         url = `${SB_URL}/feed`;
         body = { media_type:formType, caption:formCaption||undefined, name:formName||undefined, scheduled_time:formTime, day_of_week:parseInt(formDay) };
-        if(isCarousel) body.media_urls = formMediaUrls.map(s=>s.trim()).filter(Boolean);
-        else body.media_url = formMediaUrl;
+        if(isCarousel){
+          body.media_urls = formMediaUrls.map(s=>s.trim()).filter(Boolean);
+        } else {
+          body.media_url = formMediaUrl.trim();
+        }
       }
       const r = await fetch(url, { method:"POST", headers:sbHeaders(), body:JSON.stringify(body) });
-      const d = await r.json();
-      if(!r.ok){ setFormErr(d.detail||"Erro ao criar"); setFormLoading(false); return; }
+      let d;
+      try { d = await r.json(); } catch { d = {}; }
+      if(!r.ok){
+        // Token expirado → força novo login
+        if(r.status===401){
+          sbLogout();
+          setSbLoginErr("Sessão expirada. Faça login novamente.");
+          setFormLoading(false); return;
+        }
+        setFormErr(typeof d.detail==="string" ? d.detail : JSON.stringify(d.detail) || `Erro ${r.status}`);
+        setFormLoading(false); return;
+      }
       setShowForm(false);
       loadAll();
-    } catch(e){ setFormErr("Erro de conexão"); }
+    } catch(e){
+      setFormErr("Erro de conexão com o servidor.");
+    }
     setFormLoading(false);
   }
 
@@ -1556,6 +1603,11 @@ function StoriesBot() {
             onKeyDown={e=>e.key==="Enter"&&sbLogin()}
             style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:8,padding:"10px 14px",color:C.text,fontSize:14,outline:"none",width:"100%",boxSizing:"border-box"}}/>
           {sbLoginErr&&<div style={{color:C.red,fontSize:12}}>{sbLoginErr}</div>}
+          <label style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",userSelect:"none"}}>
+            <input type="checkbox" checked={sbRemember} onChange={e=>setSbRemember(e.target.checked)}
+              style={{width:15,height:15,accentColor:C.accent,cursor:"pointer"}}/>
+            <span style={{color:C.muted,fontSize:13}}>Lembrar login</span>
+          </label>
           <button onClick={sbLogin} disabled={sbLoading}
             style={{background:"linear-gradient(90deg,#e1306c,#405de6)",color:"#fff",border:"none",borderRadius:8,padding:"11px",fontWeight:600,fontSize:14,cursor:"pointer",opacity:sbLoading?0.6:1}}>
             {sbLoading?"Entrando…":"Entrar"}
@@ -1600,6 +1652,9 @@ function StoriesBot() {
           </button>
           <button onClick={openFormGeneral} style={{background:`linear-gradient(90deg,${currentTab.color},${C.accent})`,color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontWeight:600,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
             <PlusCircle size={15}/> Novo Post
+          </button>
+          <button onClick={sbLogout} title="Sair" style={{background:`${C.red}18`,color:C.red,border:`1px solid ${C.red}33`,borderRadius:8,padding:"7px 10px",cursor:"pointer",display:"flex",alignItems:"center"}}>
+            <LogOut size={14}/>
           </button>
         </div>
       </div>
