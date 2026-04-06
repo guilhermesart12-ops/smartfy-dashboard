@@ -330,11 +330,7 @@ function Dashboard({data,prejuizoMes,metaDailyData,kommoStats,forecast}){
         <div style={{marginBottom:8}}>
           <MetaProgressBar atual={faturamentoMesAtual} meta={metaMes} supermeta={supermetaMes} label={`Faturamento — ${MONTHS[new Date().getMonth()]}`}/>
           {metaDiaria>0&&(
-            <div style={{background:C.card2,border:`1px solid ${C.border}`,borderRadius:10,padding:"10px 16px",display:"flex",gap:24,flexWrap:"wrap"}}>
-              <div><span style={{color:C.muted,fontSize:12}}>Meta diária: </span><span style={{color:C.accent,fontWeight:700}}>{fmt(metaDiaria)}</span></div>
-              <div><span style={{color:C.muted,fontSize:12}}>Meta até hoje (dia {diaAtual}): </span><span style={{color:C.cyan,fontWeight:700}}>{fmt(metaAteHoje)}</span></div>
-              <div><span style={{color:C.muted,fontSize:12}}>Realizado até hoje: </span><span style={{color:faturamentoMesAtual>=metaAteHoje?C.green:C.red,fontWeight:700}}>{fmt(faturamentoMesAtual)}</span></div>
-            </div>
+            <MetaProgressBar atual={faturamentoMesAtual} meta={metaAteHoje} supermeta={0} label={`Meta diária × ${diaAtual} dias (dia ${diaAtual})`}/>
           )}
         </div>
       )}
