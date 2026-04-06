@@ -1292,8 +1292,9 @@ const SB_DAYS = [
   {id:3,label:"QUA"},{id:4,label:"QUI"},{id:5,label:"SEX"},{id:6,label:"SÁB"}
 ];
 const SB_TABS = [
-  {id:"stories", label:"📸 Stories", color:"#e1306c"},
-  {id:"feed",    label:"🖼 Feed & Reels", color:"#405de6"},
+  {id:"stories",   label:"📸 Stories",     color:"#e1306c"},
+  {id:"feed",      label:"🖼 Feed & Reels", color:"#405de6"},
+  {id:"instagram", label:"📱 Instagram",    color:"#833ab4"},
 ];
 const SB_STATUS_COLOR = {pending:C.yellow, posted:C.green, failed:C.red, processing:C.cyan, scheduled:C.accent};
 const SB_TYPE_ICONS = {story:"📸",image:"🖼",video:"🎬",reel:"🎭",carousel:"🎠"};
@@ -1483,13 +1484,21 @@ function StoriesBot() {
   const [sbLoginErr, setSbLoginErr] = useState("");
   const [sbLoading, setSbLoading] = useState(false);
 
-  // 2 tabs
+  // 3 tabs: stories | feed | instagram
   const [sbTab, setSbTab] = useState("stories");
 
   // Data
   const [stories, setStories] = useState([]);
   const [feedItems, setFeedItems] = useState([]); // feed + reels + carousel combined
   const [dataLoading, setDataLoading] = useState(false);
+
+  // Instagram connection
+  const [igAccount, setIgAccount] = useState(null); // {connected, ig_user_id, ig_username}
+  const [igLoading, setIgLoading] = useState(false);
+  const [igToken, setIgToken] = useState("");
+  const [igUserId, setIgUserId] = useState("");
+  const [igErr, setIgErr] = useState("");
+  const [igSuccess, setIgSuccess] = useState("");
 
   // Form
   const [showForm, setShowForm] = useState(false);
@@ -1530,6 +1539,7 @@ function StoriesBot() {
         }
       } catch{}
       loadAll(d.access_token);
+      loadIgAccount(d.access_token);
     } catch(e) { setSbLoginErr("Erro de conexão"); }
     setSbLoading(false);
   }
@@ -1540,7 +1550,32 @@ function StoriesBot() {
   }
 
   // Auto-load when token is restored from localStorage
-  useEffect(()=>{ if(sbToken) loadAll(sbToken); },[]);
+  useEffect(()=>{ if(sbToken){ loadAll(sbToken); loadIgAccount(sbToken); } },[]);
+
+  async function loadIgAccount(tok) {
+    try {
+      const r = await fetch(`${SB_URL}/instagram-account`, { headers: sbHeaders(tok||sbToken) });
+      if(r.ok){ const d = await r.json(); setIgAccount(d); }
+    } catch(e){}
+  }
+
+  async function connectInstagram() {
+    if(!igToken.trim()){ setIgErr("Cole o Access Token do Instagram."); return; }
+    setIgLoading(true); setIgErr(""); setIgSuccess("");
+    try {
+      const body = { access_token: igToken.trim() };
+      if(igUserId.trim()) body.ig_user_id = igUserId.trim();
+      const r = await fetch(`${SB_URL}/connect-instagram`, {
+        method:"POST", headers:sbHeaders(), body:JSON.stringify(body)
+      });
+      const d = await r.json();
+      if(!r.ok){ setIgErr(typeof d.detail==="string"?d.detail:JSON.stringify(d.detail)||"Erro ao conectar"); setIgLoading(false); return; }
+      setIgSuccess(`✅ Conectado como @${d.ig_username||d.ig_user_id}!`);
+      setIgAccount({connected:true, ig_user_id:d.ig_user_id, ig_username:d.ig_username});
+      setIgToken(""); setIgUserId("");
+    } catch(e){ setIgErr("Erro de conexão com o servidor."); }
+    setIgLoading(false);
+  }
 
   async function loadAll(tok) {
     const t = tok||sbToken;
@@ -1717,12 +1752,15 @@ function StoriesBot() {
 
   const currentTab = SB_TABS.find(t=>t.id===sbTab);
   const currentItems = sbTab==="stories" ? stories : feedItems;
-  const isStory = sbTab==="stories";
 
-  // Totals per tab
+  // Badge for Instagram tab: show ✓ if connected, ! if not
+  const igBadge = igAccount?.connected ? "✓" : "!";
+  const igBadgeColor = igAccount?.connected ? C.green : C.yellow;
+
   const counts = {
     stories: stories.length,
     feed: feedItems.length,
+    instagram: igBadge,
   };
 
   return (
@@ -1735,7 +1773,9 @@ function StoriesBot() {
           </div>
           <div>
             <div style={{color:C.text,fontWeight:700,fontSize:18}}>StoriesBot</div>
-            <div style={{color:C.muted,fontSize:12}}>Kanban semanal · Instagram</div>
+            <div style={{color:igAccount?.connected?C.green:C.yellow,fontSize:12}}>
+              {igAccount?.connected ? `✓ @${igAccount.ig_username||igAccount.ig_user_id}` : "⚠️ Instagram não conectado"}
+            </div>
           </div>
         </div>
         <div style={{display:"flex",gap:8,alignItems:"center",flexWrap:"wrap"}}>
@@ -1748,9 +1788,11 @@ function StoriesBot() {
           <button onClick={()=>loadAll()} style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:8,padding:"6px 12px",color:C.muted,fontSize:12,cursor:"pointer",display:"flex",alignItems:"center",gap:5}}>
             <RefreshCw size={12}/> Atualizar
           </button>
-          <button onClick={openFormGeneral} style={{background:`linear-gradient(90deg,${currentTab.color},${C.accent})`,color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontWeight:600,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
-            <PlusCircle size={15}/> Novo Post
-          </button>
+          {sbTab!=="instagram"&&(
+            <button onClick={openFormGeneral} style={{background:`linear-gradient(90deg,${currentTab.color},${C.accent})`,color:"#fff",border:"none",borderRadius:8,padding:"8px 16px",fontWeight:600,fontSize:13,cursor:"pointer",display:"flex",alignItems:"center",gap:6}}>
+              <PlusCircle size={15}/> Novo Post
+            </button>
+          )}
           <button onClick={sbLogout} title="Sair" style={{background:`${C.red}18`,color:C.red,border:`1px solid ${C.red}33`,borderRadius:8,padding:"7px 10px",cursor:"pointer",display:"flex",alignItems:"center"}}>
             <LogOut size={14}/>
           </button>
@@ -1767,38 +1809,130 @@ function StoriesBot() {
             display:"flex",alignItems:"center",gap:6,
           }}>
             {label}
-            <span style={{background:sbTab===id?"rgba(255,255,255,0.25)":C.border,borderRadius:99,padding:"1px 6px",fontSize:10,fontWeight:700,color:sbTab===id?"#fff":C.muted}}>
+            <span style={{
+              background:sbTab===id?"rgba(255,255,255,0.25)": id==="instagram" ? `${igBadgeColor}33` : C.border,
+              borderRadius:99,padding:"1px 6px",fontSize:10,fontWeight:700,
+              color:sbTab===id?"#fff": id==="instagram" ? igBadgeColor : C.muted
+            }}>
               {counts[id]}
             </span>
           </button>
         ))}
       </div>
 
-      {/* Kanban */}
-      {dataLoading ? (
-        <div style={{textAlign:"center",color:C.muted,padding:60}}><Loader size={28} style={{animation:"spin 1s linear infinite"}}/></div>
-      ) : (
-        <SbKanban
-          items={currentItems}
-          onPostNow={handlePostNow}
-          onDelete={handleDelete}
-          onAddInDay={openFormForDay}
-          isFeed={sbTab==="feed"}
-        />
+      {/* Instagram connect tab */}
+      {sbTab==="instagram" && (
+        <div style={{maxWidth:480}}>
+          {/* Status atual */}
+          <div style={{
+            background: igAccount?.connected ? `${C.green}11` : `${C.yellow}11`,
+            border:`1px solid ${igAccount?.connected ? C.green : C.yellow}44`,
+            borderRadius:12,padding:"16px 20px",marginBottom:20,
+            display:"flex",alignItems:"center",gap:14,
+          }}>
+            <div style={{fontSize:28}}>{igAccount?.connected ? "✅" : "⚠️"}</div>
+            <div>
+              <div style={{color:C.text,fontWeight:700,fontSize:15}}>
+                {igAccount?.connected ? `Conectado como @${igAccount.ig_username||igAccount.ig_user_id}` : "Instagram não conectado"}
+              </div>
+              <div style={{color:C.muted,fontSize:12,marginTop:2}}>
+                {igAccount?.connected
+                  ? `ID: ${igAccount.ig_user_id} · Posts e stories vão usar esta conta`
+                  : "Conecte para poder postar stories, feed e reels"}
+              </div>
+            </div>
+          </div>
+
+          {/* Formulário de conexão */}
+          <div style={{background:C.card,border:`1px solid ${C.border}`,borderRadius:12,padding:"20px 22px"}}>
+            <div style={{color:C.text,fontWeight:700,fontSize:15,marginBottom:4}}>
+              {igAccount?.connected ? "🔄 Atualizar conexão" : "🔗 Conectar Instagram"}
+            </div>
+            <div style={{color:C.muted,fontSize:12,marginBottom:18}}>
+              Você precisa de um Access Token de longa duração (60 dias) do Meta/Facebook.{" "}
+              <span style={{color:C.accent}}>developers.facebook.com → Graph API Explorer</span>
+            </div>
+
+            <div style={{display:"flex",flexDirection:"column",gap:12}}>
+              <div>
+                <div style={{color:C.muted,fontSize:12,marginBottom:4}}>Access Token <span style={{color:C.red}}>*</span></div>
+                <input
+                  value={igToken}
+                  onChange={e=>setIgToken(e.target.value)}
+                  placeholder="EAAxxxxx... (token do Facebook/Instagram)"
+                  type="password"
+                  style={{width:"100%",background:C.card2,border:`1px solid ${igToken.trim()?C.accent:C.border}`,borderRadius:8,padding:"10px 12px",color:C.text,fontSize:13,outline:"none",boxSizing:"border-box"}}
+                />
+              </div>
+              <div>
+                <div style={{color:C.muted,fontSize:12,marginBottom:4}}>Instagram User ID <span style={{color:C.muted}}>(opcional — detectado automaticamente)</span></div>
+                <input
+                  value={igUserId}
+                  onChange={e=>setIgUserId(e.target.value)}
+                  placeholder="Ex: 17841400000000000"
+                  style={{width:"100%",background:C.card2,border:`1px solid ${igUserId.trim()?C.accent:C.border}`,borderRadius:8,padding:"10px 12px",color:C.text,fontSize:13,outline:"none",boxSizing:"border-box"}}
+                />
+              </div>
+              {igErr&&<div style={{color:C.red,fontSize:12,background:`${C.red}11`,borderRadius:7,padding:"8px 12px"}}>⚠️ {igErr}</div>}
+              {igSuccess&&<div style={{color:C.green,fontSize:12,background:`${C.green}11`,borderRadius:7,padding:"8px 12px"}}>{igSuccess}</div>}
+              <button onClick={connectInstagram} disabled={igLoading} style={{
+                background:"linear-gradient(90deg,#e1306c,#833ab4,#405de6)",
+                color:"#fff",border:"none",borderRadius:8,padding:"11px",
+                fontWeight:700,fontSize:14,cursor:igLoading?"not-allowed":"pointer",
+                opacity:igLoading?0.6:1,display:"flex",alignItems:"center",justifyContent:"center",gap:8,
+              }}>
+                {igLoading?<><Loader size={14} style={{animation:"spin 1s linear infinite"}}/> Conectando…</>:<>📱 {igAccount?.connected?"Atualizar Token":"Conectar Instagram"}</>}
+              </button>
+            </div>
+
+            {/* Guia rápido */}
+            <div style={{marginTop:18,padding:"14px 16px",background:C.card2,borderRadius:8,border:`1px solid ${C.border}`}}>
+              <div style={{color:C.text,fontWeight:600,fontSize:12,marginBottom:8}}>📋 Como pegar o token:</div>
+              {[
+                "Acesse developers.facebook.com/tools/explorer",
+                "Selecione seu App → Gerar Token de Acesso",
+                "Permissões: instagram_basic + instagram_content_publish",
+                "Copie o token e cole acima",
+                "Para token de 60 dias: vá em tools/debug/accesstoken → Estender Token",
+              ].map((step,i)=>(
+                <div key={i} style={{display:"flex",gap:8,marginBottom:5}}>
+                  <span style={{color:C.accent,fontWeight:700,fontSize:11,minWidth:16}}>{i+1}.</span>
+                  <span style={{color:C.muted,fontSize:11}}>{step}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
 
-      {/* Stats bar */}
-      <div style={{display:"flex",gap:12,marginTop:16,flexWrap:"wrap"}}>
-        {(["pending","posted","failed"] ).map(st=>{
-          const count = currentItems.filter(it=>it.status===st).length;
-          const col = SB_STATUS_COLOR[st]||C.muted;
-          return count>0 ? (
-            <span key={st} style={{background:`${col}18`,color:col,borderRadius:7,padding:"4px 12px",fontSize:12,fontWeight:600}}>
-              {st==="pending"?"⏳":st==="posted"?"✅":"❌"} {count} {st}
-            </span>
-          ) : null;
-        })}
-      </div>
+      {/* Kanban (stories ou feed) */}
+      {sbTab!=="instagram" && (
+        <>
+          {dataLoading ? (
+            <div style={{textAlign:"center",color:C.muted,padding:60}}><Loader size={28} style={{animation:"spin 1s linear infinite"}}/></div>
+          ) : (
+            <SbKanban
+              items={currentItems}
+              onPostNow={handlePostNow}
+              onDelete={handleDelete}
+              onAddInDay={openFormForDay}
+              isFeed={sbTab==="feed"}
+            />
+          )}
+          {/* Stats bar */}
+          <div style={{display:"flex",gap:12,marginTop:16,flexWrap:"wrap"}}>
+            {["pending","posted","failed"].map(st=>{
+              const count = currentItems.filter(it=>it.status===st).length;
+              const col = SB_STATUS_COLOR[st]||C.muted;
+              return count>0 ? (
+                <span key={st} style={{background:`${col}18`,color:col,borderRadius:7,padding:"4px 12px",fontSize:12,fontWeight:600}}>
+                  {st==="pending"?"⏳":st==="posted"?"✅":"❌"} {count} {st}
+                </span>
+              ) : null;
+            })}
+          </div>
+        </>
+      )}
 
       {/* Form Modal */}
       {showForm&&(
