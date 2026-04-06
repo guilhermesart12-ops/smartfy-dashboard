@@ -235,6 +235,149 @@ function LoginScreen({onLogin}){
   );
 }
 
+// ─── BARRA META DIÁRIA (fogo / sangue nos olhos) ─────────────────────────────
+function MetaDiariaBar({faturamentoHoje, metaDiaria, supermetaDiaria}){
+  if(!metaDiaria||metaDiaria<=0) return null;
+  const bateuMeta = faturamentoHoje >= metaDiaria;
+  const bateuSuper = supermetaDiaria > 0 && faturamentoHoje >= supermetaDiaria;
+
+  // The bar has two zones: [0 → metaDiaria] + [metaDiaria → supermetaDiaria]
+  // We render them side-by-side; the meta zone takes 70% width, supermeta extension 30%
+  const hasSuper = supermetaDiaria > 0 && supermetaDiaria > metaDiaria;
+  const metaZonePct = hasSuper ? 70 : 100;
+  const superZonePct = hasSuper ? 30 : 0;
+
+  // Fill within meta zone (0–100%)
+  const fillMetaPct = Math.min((faturamentoHoje / metaDiaria) * 100, 100);
+  // Fill within supermeta zone (0–100%), only if meta was beaten
+  const fillSuperPct = hasSuper && bateuMeta
+    ? Math.min(((faturamentoHoje - metaDiaria) / (supermetaDiaria - metaDiaria)) * 100, 100)
+    : 0;
+
+  const falta = metaDiaria - faturamentoHoje;
+  const pctDia = faturamentoHoje > 0 ? ((faturamentoHoje / metaDiaria) * 100).toFixed(1) : "0.0";
+
+  const fireGradient = "linear-gradient(90deg,#ff3c00,#ff7a00,#ffd000,#ff4800)";
+  const superGradient = "linear-gradient(90deg,#ffd000,#ff00cc,#a855f7,#6c63ff)";
+  const normalGradient = `linear-gradient(90deg,${C.accent},${C.accentLight})`;
+  const nearGradient = `linear-gradient(90deg,${C.yellow},#ff9900)`;
+
+  const barColor = bateuMeta ? fireGradient : (faturamentoHoje >= metaDiaria * 0.8 ? nearGradient : normalGradient);
+
+  return (
+    <div style={{
+      background: bateuMeta
+        ? "linear-gradient(135deg,#1a0800 0%,#2a0a00 50%,#1a0800 100%)"
+        : C.card,
+      border: `1px solid ${bateuMeta ? "#ff4400" : C.border}`,
+      borderRadius: 12,
+      padding: "16px 20px",
+      marginBottom: 12,
+      position: "relative",
+      overflow: "hidden",
+      boxShadow: bateuMeta ? "0 0 24px rgba(255,68,0,0.35), inset 0 0 40px rgba(255,68,0,0.08)" : "none",
+    }}>
+      {/* Fundo pulsante quando meta batida */}
+      {bateuMeta && (
+        <div style={{
+          position:"absolute",top:0,left:0,right:0,bottom:0,
+          background:"radial-gradient(ellipse at center, rgba(255,80,0,0.12) 0%, transparent 70%)",
+          animation:"pulse-fire 1.5s ease-in-out infinite",
+          pointerEvents:"none",
+        }}/>
+      )}
+
+      {/* Header */}
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:10,position:"relative"}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          {bateuSuper ? <span style={{fontSize:18}}>🏆</span> : bateuMeta ? <span style={{fontSize:18,animation:"shake 0.4s ease infinite"}}>🔥</span> : <span style={{fontSize:16}}>🎯</span>}
+          <span style={{
+            color: bateuMeta ? "#ff9944" : C.text,
+            fontWeight:700,
+            fontSize:14,
+            textTransform:"uppercase",
+            letterSpacing:"0.05em",
+          }}>Meta do Dia</span>
+          {bateuMeta && <span style={{fontSize:12,background:"#ff4400",color:"#fff",padding:"2px 8px",borderRadius:99,fontWeight:700,animation:"pulse-fire 1s ease infinite"}}>META BATIDA!</span>}
+          {bateuSuper && <span style={{fontSize:12,background:"linear-gradient(90deg,#a855f7,#6c63ff)",color:"#fff",padding:"2px 8px",borderRadius:99,fontWeight:700,marginLeft:4}}>🚀 SUPERMETA!</span>}
+        </div>
+        <span style={{
+          color: bateuMeta ? "#ff9944" : C.text,
+          fontWeight:800,
+          fontSize:16,
+        }}>{pctDia}%</span>
+      </div>
+
+      {/* Barra */}
+      <div style={{display:"flex",gap:3,alignItems:"stretch",height:22,borderRadius:99,overflow:"hidden",background:C.border}}>
+        {/* Zona meta */}
+        <div style={{flex:metaZonePct,position:"relative",overflow:"hidden"}}>
+          <div style={{
+            width:`${fillMetaPct}%`,
+            height:"100%",
+            background: barColor,
+            backgroundSize: bateuMeta ? "200% 100%" : "100% 100%",
+            animation: bateuMeta ? "fire-slide 1.2s linear infinite" : "none",
+            transition: "width 0.6s cubic-bezier(0.25,1,0.5,1)",
+            boxShadow: bateuMeta ? "4px 0 12px rgba(255,100,0,0.8)" : "none",
+          }}/>
+          {bateuMeta && <div style={{position:"absolute",inset:0,background:"linear-gradient(90deg,transparent 60%,rgba(255,150,0,0.3))",animation:"flicker 0.3s ease infinite alternate"}}/>}
+        </div>
+        {/* Divisor — linha da meta */}
+        {hasSuper && <div style={{width:2,background: bateuMeta ? "#ff6600" : "#444",flexShrink:0}}/>}
+        {/* Zona supermeta */}
+        {hasSuper && (
+          <div style={{flex:superZonePct,position:"relative",overflow:"hidden",background:"rgba(168,85,247,0.08)"}}>
+            {bateuMeta && (
+              <div style={{
+                width:`${fillSuperPct}%`,
+                height:"100%",
+                background: superGradient,
+                backgroundSize:"200% 100%",
+                animation:"fire-slide 0.8s linear infinite",
+                transition:"width 0.6s ease",
+              }}/>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Labels abaixo da barra */}
+      <div style={{display:"flex",justifyContent:"space-between",marginTop:6,fontSize:11,color:C.muted}}>
+        <span>R$ 0</span>
+        <span style={{color: bateuMeta ? "#ff9944" : C.muted, fontWeight: bateuMeta ? 700 : 400}}>
+          🎯 {fmt(metaDiaria)}
+        </span>
+        {hasSuper && <span style={{color: bateuSuper ? "#a855f7" : C.muted, fontWeight: bateuSuper ? 700 : 400}}>
+          🚀 {fmt(supermetaDiaria)}
+        </span>}
+      </div>
+
+      {/* Status */}
+      <div style={{marginTop:8,fontSize:12,position:"relative"}}>
+        {bateuSuper ? (
+          <span style={{color:"#c084fc",fontWeight:700}}>🏆 Supermeta destruída! +{fmt(faturamentoHoje - supermetaDiaria)} acima da supermeta</span>
+        ) : bateuMeta ? (
+          <span style={{color:"#ff9944",fontWeight:700}}>🔥 Meta batida! +{fmt(faturamentoHoje - metaDiaria)} acima · {hasSuper ? `Falta ${fmt(supermetaDiaria - faturamentoHoje)} pra supermeta` : ""}</span>
+        ) : faturamentoHoje > 0 ? (
+          <span style={{color:C.muted}}>
+            <span style={{color:C.text,fontWeight:600}}>{fmt(faturamentoHoje)}</span> vendidos hoje · Falta <span style={{color:C.red,fontWeight:700}}>{fmt(falta)}</span>
+          </span>
+        ) : (
+          <span style={{color:C.muted}}>Nenhuma venda registrada hoje · Meta: <span style={{color:C.accentLight,fontWeight:600}}>{fmt(metaDiaria)}</span></span>
+        )}
+      </div>
+
+      <style>{`
+        @keyframes fire-slide{from{background-position:0% 0%}to{background-position:200% 0%}}
+        @keyframes pulse-fire{0%,100%{opacity:1}50%{opacity:0.6}}
+        @keyframes shake{0%,100%{transform:rotate(-8deg)}50%{transform:rotate(8deg)}}
+        @keyframes flicker{from{opacity:0.6}to{opacity:1}}
+      `}</style>
+    </div>
+  );
+}
+
 // ─── BARRA DE META ───────────────────────────────────────────────────────────
 function MetaProgressBar({atual,meta,supermeta,label}){
   if(!meta||meta<=0) return null;
@@ -314,8 +457,10 @@ function Dashboard({data,prejuizoMes,metaDailyData,kommoStats,forecast}){
   // Meta diária proporcional (dias trabalhados)
   const diasTrabalhados=currentMonthForecast?.dias_trabalhados||getDaysInMonth(YEAR,new Date().getMonth());
   const metaDiaria=metaMes>0?metaMes/diasTrabalhados:0;
+  const supermetaDiaria=supermetaMes>0?supermetaMes/diasTrabalhados:0;
   const diaAtual=new Date().getDate();
-  const metaAteHoje=metaDiaria*Math.min(diaAtual,diasTrabalhados);
+  const todayYMD=toYMD(new Date());
+  const faturamentoHoje=(data[new Date().getMonth()]||[]).find(d=>d.date===todayYMD)?.faturamento||0;
 
   return (
     <div>
@@ -330,7 +475,7 @@ function Dashboard({data,prejuizoMes,metaDailyData,kommoStats,forecast}){
         <div style={{marginBottom:8}}>
           <MetaProgressBar atual={faturamentoMesAtual} meta={metaMes} supermeta={supermetaMes} label={`Faturamento — ${MONTHS[new Date().getMonth()]}`}/>
           {metaDiaria>0&&(
-            <MetaProgressBar atual={faturamentoMesAtual} meta={metaAteHoje} supermeta={0} label={`Meta diária × ${diaAtual} dias (dia ${diaAtual})`}/>
+            <MetaDiariaBar faturamentoHoje={faturamentoHoje} metaDiaria={metaDiaria} supermetaDiaria={supermetaDiaria}/>
           )}
         </div>
       )}
